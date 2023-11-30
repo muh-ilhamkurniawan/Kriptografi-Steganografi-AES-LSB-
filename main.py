@@ -10,8 +10,8 @@ from cryptography.hazmat.primitives import padding
 from base64 import b64encode, b64decode
 import os
 
-def encrypt_text(key, text):
-    key = key.encode('utf-8')
+def encrypt_text(key_encrip, text):
+    # key_encrip = key_encrip.encode('utf-8')
     text = text.encode('utf-8')
 
     # Generate a random IV (Initialization Vector)
@@ -21,8 +21,8 @@ def encrypt_text(key, text):
     padder = padding.PKCS7(128).padder()
     padded_text = padder.update(text) + padder.finalize()
 
-    # Create an AES cipher object with the key, mode, and backend
-    cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
+    # Create an AES cipher object with the key_encrip, mode, and backend
+    cipher = Cipher(algorithms.AES(key_encrip), modes.CFB(iv), backend=default_backend())
     encryptor = cipher.encryptor()
 
     # Encrypt the padded text
@@ -33,28 +33,31 @@ def encrypt_text(key, text):
 
     return encrypted_data
 
-def decrypt_text(key, encrypted_data):
-    key = key.encode('utf-8')
+def decrypt_text(key_decrip, encrypted_data):
+    # key_decrip = key_decrip.encode('utf-8')
     encrypted_data = b64decode(encrypted_data)
 
     # Extract IV from the first 16 bytes of the encrypted data
     iv = encrypted_data[:16]
     ciphertext = encrypted_data[16:]
 
-    # Create an AES cipher object with the key, mode, and backend
-    cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
+    # Create an AES cipher object with the key_decrip, mode, and backend
+    cipher = Cipher(algorithms.AES(key_decrip), modes.CFB(iv), backend=default_backend())
     decryptor = cipher.decryptor()
 
-    # Decrypt the ciphertext
-    decrypted_data = decryptor.update(ciphertext) + decryptor.finalize()
+    try:
+        # Decrypt the ciphertext
+        decrypted_data = decryptor.update(ciphertext) + decryptor.finalize()
 
-    # Remove padding from the decrypted data
-    unpadder = padding.PKCS7(128).unpadder()
-    unpadded_data = unpadder.update(decrypted_data) + unpadder.finalize()
+        # Remove padding from the decrypted data
+        unpadder = padding.PKCS7(128).unpadder()
+        unpadded_data = unpadder.update(decrypted_data) + unpadder.finalize()
 
-    return unpadded_data.decode('utf-8')
+        return unpadded_data.decode('utf-8')
 
-
+    except ValueError as e:
+        print(f"Decryption error: {e}")
+        return None  # or handle the error in another way
 
 # Function to encode the message into the image
 def encode_message(message, image):
@@ -70,24 +73,24 @@ def encode_message(message, image):
     col1.success("Image encoded successfully.")
     show_encoded_image(encoded_image_path)
 
-
 # Function to decode the hidden message from the image
 def decode_message(image):
-    # Decode the hidden message from the image
     decoded_message = decode_data(image)
-    # Contoh penggunaan
     
-    new_decoded_message = decrypt_text(key, decoded_message)
-    col3.write("Enkripsi Message: " + decoded_message)
-    col3.write("Hidden Message: " + new_decoded_message)
-    show_decoded_image(image)  # Call the function to display the decoded image
-
+    new_decoded_message = decrypt_text(key_decrip, decoded_message)
+    
+    if new_decoded_message is not None:
+        col3.write("Enkripsi Message: " + decoded_message)
+        col3.write("Hidden Message: " + new_decoded_message)
+    else:
+        col3.error("Decryption failed. Invalid key or padding.")
+    
+    show_decoded_image(image)
 
 # Function to display the decoded image in the UI
 def show_decoded_image(decoded_image):
     col4.header("Decoded Image")
     col4.image(decoded_image, caption="Decoded Image", use_column_width=True)
-
 
 # Function to encode the data (message) into the image
 def encode_data(image, data):
@@ -109,7 +112,6 @@ def encode_data(image, data):
 
     return encoded_pixels
 
-
 # Function to decode the data (message) from the image
 def decode_data(image):
     pixels = list(image.getdata())
@@ -126,7 +128,6 @@ def decode_data(image):
             break
 
     return data[:-1]  # Removing the delimiter
-
 
 # Function to display the encoded image in the UI and add a download button
 def show_encoded_image(image_path):
@@ -145,7 +146,6 @@ def show_encoded_image(image_path):
     col2.image(encoded_image, caption="Encoded Image", use_column_width=True)
     col2.markdown(href, unsafe_allow_html=True)
 
-
 # Streamlit GUI setup
 st.set_page_config(page_title="Image Steganography", page_icon=":shushing_face:", layout="wide")
 st.title("Hide your secrets!!!🤫")
@@ -158,20 +158,36 @@ with tab1:
 
 
     message = col1.text_input("Enter Message to Hide")
+    key_encrip = col1.text_input("Enter Key Encode")
+
+    # Convert the key to bytes using UTF-8 encoding
+    key_encrip = key_encrip.encode('utf-8')
+
+    # Choose the appropriate key size: 16, 24, or 32 bytes for AES-128, AES-192, or AES-256
+    key_encrip = key_encrip[:32].ljust(32, b'\0')  # Adjust the size to 32 bytes (256 bits)
+
     image_file = col1.file_uploader("Choose an Image", type=["png", "jpg", "jpeg"])
-    key = "kuncirahasiaanda"
-    if message and image_file:
+    # key = "kuncirahasiaanda"
+    if message and key_encrip and image_file:
         image = Image.open(image_file)
-        enkrip_message  = encrypt_text(key, message)
+        enkrip_message  = encrypt_text(key_encrip, message)
         encode_message(enkrip_message, image)
 
     st.markdown("---")
 with tab2:
     col3, col4 = st.columns(2)
     col3.header("Decode")
-    decode_image_file = col3.file_uploader("Choose an Encoded Image", type=["png", "jpg", "jpeg"])
+    
+    key_decrip = col3.text_input("Enter Key Decode")
 
-    if decode_image_file:
+    # Convert the key to bytes using UTF-8 encoding
+    key_decrip = key_decrip.encode('utf-8')
+
+    # Choose the appropriate key size: 16, 24, or 32 bytes for AES-128, AES-192, or AES-256
+    key_decrip = key_decrip[:32].ljust(32, b'\0')  # Adjust the size to 32 bytes (256 bits)
+
+    decode_image_file = col3.file_uploader("Choose an Encoded Image", type=["png", "jpg", "jpeg"])
+    if decode_image_file and key_decrip:
         decode_image = Image.open(decode_image_file)
         decode_message(decode_image)
     st.markdown("---")
